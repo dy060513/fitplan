@@ -1,298 +1,271 @@
-import type { PlanSession } from '@/types'
-
 /**
- * 训练模板
- * ------------------------------------------------------------------
- * 模板是一份「别人写好的固定处方」：动作、组数、次数、重量比例都由模板给出，
- * 不参与引擎的自动分化与自动容量推导。
- *
- * weightPct 语义：以「系统按体重估算的起始重量 ≈ 70% 极限重量」为基准，
- * 换算成模板指定的百分比。例如 83 表示 83% 极限重量。
- *
- * 用户套用后会生成一份普通 Plan，之后可以逐项改组数 / 次数 / 重量，
- * 也可以换动作、删动作，与自动生成计划完全同权。
+ * 训练模板库
+ * 模板 = 别人写好的固定处方：动作、组数、次数都按模板来；
+ * 套用后仍然可以逐个动作改重量 / 组数 / 次数（引擎只负责给一个能直接执行的起点）。
  */
 
-export interface TemplateExercise {
+export interface TemplateExerciseItem {
   exerciseId: string
   /** 组数 */
   sets: number
-  /** 每组目标次数；timed 类型单位为「秒」，cardio 类型单位为「分钟」 */
+  /** 每组次数；计时类为秒，有氧类为分钟 */
   reps: number
-  /** 相对极限重量的百分比（省略则由引擎按体重估算） */
-  weightPct?: number
-  /** 展示用备注，例如「每次增加 5 公斤」 */
+  /** 模板作者给的补充说明 */
   note?: string
 }
 
 export interface TemplateSession {
-  title: string
-  /** 训练日（0 = 周一 … 6 = 周日） */
+  /** 周内第几天（0 = 周一） */
   weekday: number
-  focus: PlanSession['focus']
-  exercises: TemplateExercise[]
+  title: string
+  exercises: TemplateExerciseItem[]
+}
+
+export interface TemplateStage {
+  id: string
+  name: string
+  summary: string
+  note?: string
+  /**
+   * 强度百分比：以「按体重估算的起始重量」为 70% 基准换算。
+   * 0.7 → 等于估算起始重量；0.9 → 估算值的 1.286 倍。
+   */
+  intensity: number
+  /** 最后阶段为冲击期：末周不减负 */
+  isPeak?: boolean
+  sessions: TemplateSession[]
 }
 
 export interface PlanTemplate {
   id: string
   name: string
-  /** 出处 / 作者，用于免责与溯源 */
+  /** 出处 */
   source: string
-  /** 一句话简介 */
   summary: string
-  /** 训练思路说明，展示在套用前 */
+  /** 训练思路 */
   principle: string[]
   tags: string[]
+  /** 每周训练天数（多阶段模板取第一阶段） */
   daysPerWeek: number
-  /** 单次预计时长（分钟） */
-  sessionMinutes: number
-  sessions: TemplateSession[]
-  /** 套用该模板需要的器械，未勾选时会自动补进器械库 */
+  /** 套用时会自动勾选的器械 */
   requiredEquipmentIds: string[]
-  /** 是否套用减负周（默认 true；冲击期模板为 false） */
-  deload?: boolean
-  /** 额外提示 */
   note?: string
+  /** 单阶段模板的训练安排 */
+  sessions?: TemplateSession[]
+  /** 多阶段模板（每个阶段展开为一个中周期） */
+  stages?: TemplateStage[]
 }
 
-/** 薄肌训练法共通说明（来自作者置顶评论） */
-const THIN_MUSCLE_PRINCIPLE = [
-  '「薄肌」指先把体脂控制在 10–18%，再谈力量与围度；体脂超过 20% 先减脂。',
-  '重量是雕刻肌肉的工具，肌肉同样是重量的产物：既不无脑冲重量，也不永远轻重量。',
-  '三大项（卧推 / 硬拉 / 深蹲）按计划的百分比执行，其余动作按自己的水平选重量。',
-  '等级表会同时看体脂、体重和动作标准度，动作变形就不算完成，防止冲重量。',
-  '大项的百分比以你自己的极限重量为基准，套用后可在每个动作里改成实际公斤数。',
-]
+/**
+ * 薄肌训练法（三阶段 12 周）
+ * 目标：低体脂 + 清晰线条，不追求围度。
+ * 阶段一打基础定动作，阶段二加容量，阶段三上强度冲重量。
+ */
+const THIN_MUSCLE: PlanTemplate = {
+  id: 'tpl_thin_muscle',
+  name: '薄肌训练法',
+  source: '按 @努力的橙子薄肌《少年，欢迎加入薄肌训练法》公开内容整理，重量与组数可按自身情况调整',
+  summary:
+    '12 周三阶段：基础期每周 5 练打底，增肌期每周 4 练加容量，冲击期上强度冲重量。轻重量、短间歇、慢离心，练线条不练围度。',
+  principle: [
+    '体脂是薄肌的前提：线条靠低体脂显出来，饮食控制优先于加重量',
+    '中低重量 + 中高次数，短间歇（45–90 秒），保持代谢压力但不堆围度',
+    '全程控制离心 2 秒、顶峰收缩 1 秒，不借惯性甩重量',
+    '每个阶段最后一周减负，给关节和神经恢复空间',
+    '力量训练后再做 15–20 分钟低强度有氧，保肌肉、刷脂肪',
+  ],
+  tags: ['薄肌', '低体脂', '线条', '12 周', '三阶段'],
+  daysPerWeek: 5,
+  requiredEquipmentIds: [
+    'eq_bench',
+    'eq_barbell',
+    'eq_squatrack',
+    'eq_dumbbell',
+    'eq_cable',
+    'eq_latpulldown',
+    'eq_legpress',
+    'eq_legcurl',
+    'eq_pullupbar',
+    'eq_elliptical',
+    'eq_yogamat',
+  ],
+  note: '共 12 周（3 阶段 × 4 周），套用后按日期自动推进阶段。每个动作的重量、组数、次数都能在计划里直接改。',
+  stages: [
+    {
+      id: 'stage1',
+      name: '基础期 · 动作定型',
+      summary: '每周 5 练，70% 强度。先把动作模式练熟，重量宁轻不求重。',
+      intensity: 0.7,
+      note: '前两周刻意留 2–3 次余力，重点感受目标肌肉发力。',
+      sessions: [
+        {
+          weekday: 0,
+          title: '胸 · 三头',
+          exercises: [
+            { exerciseId: 'ex_bb_bench', sets: 4, reps: 8, note: '主项，慢离心 2 秒' },
+            { exerciseId: 'ex_db_incline_bench', sets: 3, reps: 10 },
+            { exerciseId: 'ex_cable_fly', sets: 3, reps: 12 },
+            { exerciseId: 'ex_cable_pushdown', sets: 3, reps: 12 },
+            { exerciseId: 'ex_bw_crunch', sets: 3, reps: 15 },
+          ],
+        },
+        {
+          weekday: 1,
+          title: '背 · 二头',
+          exercises: [
+            { exerciseId: 'ex_mach_lat_pulldown', sets: 4, reps: 10 },
+            { exerciseId: 'ex_cable_row', sets: 4, reps: 10 },
+            { exerciseId: 'ex_cable_face_pull', sets: 3, reps: 15, note: '改善圆肩，肩袖健康' },
+            { exerciseId: 'ex_db_curl', sets: 3, reps: 12 },
+            { exerciseId: 'ex_db_hammer_curl', sets: 3, reps: 12 },
+          ],
+        },
+        {
+          weekday: 2,
+          title: '腿 · 臀',
+          exercises: [
+            { exerciseId: 'ex_bb_squat', sets: 4, reps: 8, note: '不追求大重量，动作到位即可' },
+            { exerciseId: 'ex_db_rdl', sets: 4, reps: 10 },
+            { exerciseId: 'ex_mach_leg_curl', sets: 3, reps: 12 },
+            { exerciseId: 'ex_bw_glute_bridge', sets: 3, reps: 15 },
+            { exerciseId: 'ex_bw_plank', sets: 3, reps: 40, note: '40 秒/组' },
+          ],
+        },
+        {
+          weekday: 3,
+          title: '肩 · 核心',
+          exercises: [
+            { exerciseId: 'ex_db_shoulder_press', sets: 4, reps: 10 },
+            { exerciseId: 'ex_db_lateral_raise', sets: 4, reps: 15, note: '撑肩宽，视觉显瘦' },
+            { exerciseId: 'ex_cable_face_pull', sets: 3, reps: 15 },
+            { exerciseId: 'ex_cable_crunch', sets: 3, reps: 15 },
+            { exerciseId: 'ex_bw_lying_leg_raise', sets: 3, reps: 12 },
+          ],
+        },
+        {
+          weekday: 4,
+          title: '弱项补强 · 有氧',
+          exercises: [
+            { exerciseId: 'ex_db_bench', sets: 3, reps: 10 },
+            { exerciseId: 'ex_bw_pullup', sets: 3, reps: 8, note: '做不了就用高位下拉代替' },
+            { exerciseId: 'ex_db_lateral_raise', sets: 3, reps: 15 },
+            { exerciseId: 'ex_cable_crunch', sets: 3, reps: 15 },
+            { exerciseId: 'ex_cardio_elliptical', sets: 1, reps: 20, note: '力量后 20 分钟低强度有氧' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'stage2',
+      name: '增肌期 · 容量叠加',
+      summary: '每周 4 练，80% 强度。组数和次数都往上加，把肌肉量垫起来。',
+      intensity: 0.8,
+      note: '这一阶段会有明显的泵感和延迟性酸痛，睡眠要跟上。',
+      sessions: [
+        {
+          weekday: 0,
+          title: '胸 · 肩 · 三头',
+          exercises: [
+            { exerciseId: 'ex_bb_bench', sets: 4, reps: 8 },
+            { exerciseId: 'ex_db_incline_bench', sets: 4, reps: 10 },
+            { exerciseId: 'ex_db_lateral_raise', sets: 4, reps: 15 },
+            { exerciseId: 'ex_cable_pushdown', sets: 4, reps: 12 },
+            { exerciseId: 'ex_bw_crunch', sets: 3, reps: 15 },
+          ],
+        },
+        {
+          weekday: 1,
+          title: '背 · 二头',
+          exercises: [
+            { exerciseId: 'ex_mach_lat_pulldown', sets: 4, reps: 10 },
+            { exerciseId: 'ex_cable_row', sets: 4, reps: 10 },
+            { exerciseId: 'ex_bw_pullup', sets: 3, reps: 8 },
+            { exerciseId: 'ex_db_curl', sets: 4, reps: 12 },
+            { exerciseId: 'ex_cable_face_pull', sets: 3, reps: 15 },
+          ],
+        },
+        {
+          weekday: 2,
+          title: '腿 · 臀',
+          exercises: [
+            { exerciseId: 'ex_bb_squat', sets: 4, reps: 8 },
+            { exerciseId: 'ex_mach_leg_press', sets: 4, reps: 10 },
+            { exerciseId: 'ex_db_rdl', sets: 4, reps: 10 },
+            { exerciseId: 'ex_mach_leg_curl', sets: 4, reps: 12 },
+            { exerciseId: 'ex_bw_plank', sets: 3, reps: 40, note: '40 秒/组' },
+          ],
+        },
+        {
+          weekday: 4,
+          title: '肩 · 手臂 · 核心',
+          exercises: [
+            { exerciseId: 'ex_db_shoulder_press', sets: 4, reps: 10 },
+            { exerciseId: 'ex_db_lateral_raise', sets: 4, reps: 15 },
+            { exerciseId: 'ex_cable_face_pull', sets: 4, reps: 15 },
+            { exerciseId: 'ex_db_hammer_curl', sets: 3, reps: 12 },
+            { exerciseId: 'ex_cable_crunch', sets: 3, reps: 15 },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'stage3',
+      name: '冲击期 · 强度冲刺',
+      summary: '每周 4 练，90% 强度。组数收、重量上，冲一波力量，最后一周做测试。',
+      intensity: 0.9,
+      isPeak: true,
+      note: '最后一周可以尝试冲击新重量，务必有人保护或有安全架。',
+      sessions: [
+        {
+          weekday: 0,
+          title: '胸 · 三头',
+          exercises: [
+            { exerciseId: 'ex_bb_bench', sets: 5, reps: 5 },
+            { exerciseId: 'ex_db_incline_bench', sets: 3, reps: 8 },
+            { exerciseId: 'ex_cable_fly', sets: 3, reps: 10 },
+            { exerciseId: 'ex_cable_pushdown', sets: 3, reps: 10 },
+            { exerciseId: 'ex_bw_crunch', sets: 3, reps: 15 },
+          ],
+        },
+        {
+          weekday: 1,
+          title: '背 · 二头',
+          exercises: [
+            { exerciseId: 'ex_mach_lat_pulldown', sets: 4, reps: 8 },
+            { exerciseId: 'ex_cable_row', sets: 4, reps: 8 },
+            { exerciseId: 'ex_bw_pullup', sets: 3, reps: 6 },
+            { exerciseId: 'ex_db_curl', sets: 3, reps: 10 },
+            { exerciseId: 'ex_cable_face_pull', sets: 3, reps: 12 },
+          ],
+        },
+        {
+          weekday: 2,
+          title: '腿 · 臀',
+          exercises: [
+            { exerciseId: 'ex_bb_squat', sets: 5, reps: 5 },
+            { exerciseId: 'ex_db_rdl', sets: 3, reps: 8 },
+            { exerciseId: 'ex_mach_leg_curl', sets: 3, reps: 10 },
+            { exerciseId: 'ex_bw_glute_bridge', sets: 3, reps: 12 },
+            { exerciseId: 'ex_bw_plank', sets: 3, reps: 40, note: '40 秒/组' },
+          ],
+        },
+        {
+          weekday: 4,
+          title: '肩 · 核心',
+          exercises: [
+            { exerciseId: 'ex_db_shoulder_press', sets: 4, reps: 8 },
+            { exerciseId: 'ex_db_lateral_raise', sets: 3, reps: 12 },
+            { exerciseId: 'ex_cable_face_pull', sets: 3, reps: 12 },
+            { exerciseId: 'ex_cable_crunch', sets: 3, reps: 12 },
+            { exerciseId: 'ex_bw_lying_leg_raise', sets: 3, reps: 12 },
+          ],
+        },
+      ],
+    },
+  ],
+}
 
-const THIN_MUSCLE_SOURCE = '抖音 @努力的橙子（自律中）第148集《少年，欢迎你加入薄肌训练法》'
-
-export const PLAN_TEMPLATES: PlanTemplate[] = [
-  {
-    id: 'tpl_thin_muscle_stage1',
-    name: '薄肌训练法 · 第一阶段 肌肥大',
-    source: THIN_MUSCLE_SOURCE,
-    summary: '每周 5 练 2 休，8–15 次 × 4 组的中高容量打基础，大项 70% 重量起步。',
-    principle: THIN_MUSCLE_PRINCIPLE,
-    tags: ['薄肌', '肌肥大', '每周 5 练', '第一阶段'],
-    daysPerWeek: 5,
-    sessionMinutes: 75,
-    sessions: [
-      {
-        title: '第 1 天 · 胸（注意控制）',
-        weekday: 0,
-        focus: 'push',
-        exercises: [
-          { exerciseId: 'ex_bb_bench', sets: 4, reps: 8, weightPct: 70, note: '70% 重量' },
-          { exerciseId: 'ex_bb_incline_bench', sets: 4, reps: 8 },
-          { exerciseId: 'ex_db_incline_bench', sets: 4, reps: 10 },
-          { exerciseId: 'ex_mach_peck_deck', sets: 4, reps: 10 },
-        ],
-      },
-      {
-        title: '第 2 天 · 背部',
-        weekday: 1,
-        focus: 'pull',
-        exercises: [
-          { exerciseId: 'ex_bb_row', sets: 4, reps: 10, note: '原计划为海豹划船' },
-          { exerciseId: 'ex_mach_seated_row', sets: 4, reps: 10, note: '贴近身体、反手' },
-          { exerciseId: 'ex_mach_closegrip_pulldown', sets: 4, reps: 11, note: '对握，拉到下巴 10～12 次' },
-          { exerciseId: 'ex_mach_lat_pulldown', sets: 4, reps: 12, note: '反手，10～13 次' },
-        ],
-      },
-      {
-        title: '第 3 天 · 肩膀（注意控制）',
-        weekday: 2,
-        focus: 'push',
-        exercises: [
-          { exerciseId: 'ex_db_rear_fly', sets: 4, reps: 12 },
-          { exerciseId: 'ex_mach_reverse_fly', sets: 4, reps: 11, note: '10～12 次' },
-          { exerciseId: 'ex_db_lateral_raise', sets: 4, reps: 10, note: '上斜凳侧平举' },
-          { exerciseId: 'ex_cable_lateral_raise', sets: 4, reps: 14, note: '12～15 次' },
-        ],
-      },
-      {
-        title: '第 4 天 · 胸 + 手臂（注意控制）',
-        weekday: 4,
-        focus: 'upper',
-        exercises: [
-          { exerciseId: 'ex_bb_bench', sets: 4, reps: 8, weightPct: 72.5, note: '极限的 72.5%' },
-          { exerciseId: 'ex_db_hammer_curl', sets: 4, reps: 10, note: '锤式双手弯举' },
-          { exerciseId: 'ex_bb_closegrip_bench', sets: 4, reps: 10, note: '原计划为上斜杠铃臂屈伸' },
-          { exerciseId: 'ex_bb_curl', sets: 4, reps: 10 },
-          { exerciseId: 'ex_cable_pushdown', sets: 4, reps: 10 },
-        ],
-      },
-      {
-        title: '第 5 天 · 腿 + 核心',
-        weekday: 5,
-        focus: 'legs',
-        exercises: [
-          { exerciseId: 'ex_bb_squat', sets: 4, reps: 8, weightPct: 70, note: '极限的 70%' },
-          { exerciseId: 'ex_bb_rdl', sets: 4, reps: 8 },
-          { exerciseId: 'ex_cable_crunch', sets: 4, reps: 12 },
-          { exerciseId: 'ex_bw_crunch', sets: 4, reps: 14, note: '杠铃片卷腹，12～15 次，可抱片加重' },
-        ],
-      },
-    ],
-    requiredEquipmentIds: [
-      'eq_bench',
-      'eq_dumbbell',
-      'eq_peckdeck',
-      'eq_seatedrow',
-      'eq_latpulldown',
-      'eq_cable',
-      'eq_squatrack',
-      'eq_barbell',
-      'eq_yogamat',
-    ],
-    note: '原计划节奏为「练 3 天 → 休 1 天 → 练 2 天 → 休 1 天」，已映射到周一 / 二 / 三 / 五 / 六。',
-  },
-  {
-    id: 'tpl_thin_muscle_stage2',
-    name: '薄肌训练法 · 第二阶段 增肌增力',
-    source: THIN_MUSCLE_SOURCE,
-    summary: '大项转为 3×3 的双组数（83% + 72.5%）波浪加重，辅助动作保持 10–12 次 × 4 组。',
-    principle: [
-      ...THIN_MUSCLE_PRINCIPLE,
-      '大项一天做两组：先冲 83% 的 4×3，再用 72.5% 的 7×3 堆容量。',
-      '超程硬拉从 65% 开始，每次训练加 5 公斤，直到动作变形为止。',
-    ],
-    tags: ['薄肌', '增肌增力', '3×3', '第二阶段'],
-    daysPerWeek: 4,
-    sessionMinutes: 75,
-    sessions: [
-      {
-        title: '第 1 天 · 胸 + 肩中束',
-        weekday: 0,
-        focus: 'push',
-        exercises: [
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 4, weightPct: 83, note: '83%' },
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 7, weightPct: 72.5, note: '72.5%，同一动作第二组数' },
-          { exerciseId: 'ex_db_lateral_raise', sets: 4, reps: 11, note: '站姿，10～12 次' },
-          { exerciseId: 'ex_cable_lateral_raise', sets: 4, reps: 11, note: '10～12 次' },
-        ],
-      },
-      {
-        title: '第 2 天 · 背部 + 肩后束',
-        weekday: 1,
-        focus: 'pull',
-        exercises: [
-          { exerciseId: 'ex_bb_deadlift', sets: 3, reps: 3, weightPct: 65, note: '超程硬拉，65% 起步每次 +5kg' },
-          { exerciseId: 'ex_bb_row', sets: 4, reps: 10, note: '原计划为 T 杆划船' },
-          { exerciseId: 'ex_mach_closegrip_pulldown', sets: 4, reps: 10, note: '对握' },
-          { exerciseId: 'ex_db_rear_fly', sets: 4, reps: 12 },
-          { exerciseId: 'ex_mach_reverse_fly', sets: 4, reps: 10 },
-        ],
-      },
-      {
-        title: '第 3 天 · 胸 + 手臂',
-        weekday: 4,
-        focus: 'upper',
-        exercises: [
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 4, weightPct: 84, note: '84%' },
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 7, weightPct: 72.5, note: '72.5%' },
-          { exerciseId: 'ex_db_hammer_curl', sets: 4, reps: 10, note: '锤式弯举' },
-          { exerciseId: 'ex_bb_closegrip_bench', sets: 4, reps: 10, note: '原计划为上斜杠铃臂屈伸' },
-          { exerciseId: 'ex_cable_pushdown', sets: 4, reps: 12 },
-        ],
-      },
-      {
-        title: '第 4 天 · 腿 + 核心',
-        weekday: 5,
-        focus: 'legs',
-        exercises: [
-          { exerciseId: 'ex_bb_squat', sets: 3, reps: 4, weightPct: 83, note: '83%' },
-          { exerciseId: 'ex_bb_squat', sets: 3, reps: 7, weightPct: 72.5, note: '72.5%' },
-          { exerciseId: 'ex_cable_crunch', sets: 4, reps: 15, note: '跪姿' },
-          { exerciseId: 'ex_mach_lat_pulldown', sets: 4, reps: 12, note: '侧身高位下拉' },
-        ],
-      },
-    ],
-    requiredEquipmentIds: [
-      'eq_bench',
-      'eq_dumbbell',
-      'eq_barbell',
-      'eq_latpulldown',
-      'eq_peckdeck',
-      'eq_cable',
-      'eq_squatrack',
-      'eq_yogamat',
-    ],
-    note: '原计划节奏为「练 2 天 → 休 1 天 → 练 2 天 → 休 2 天」，已映射到周一 / 二 / 五 / 六。',
-  },
-  {
-    id: 'tpl_thin_muscle_stage3',
-    name: '薄肌训练法 · 第三阶段 冲击期',
-    source: THIN_MUSCLE_SOURCE,
-    summary: '大项拉到 90% 冲极限，总组数下降、强度拉满，适合已经跑完前两个阶段的人。',
-    principle: [
-      ...THIN_MUSCLE_PRINCIPLE,
-      '冲击期用 90% + 78% 的双组数冲击新极限，组间休息拉长到 3 分钟。',
-      '卧推极限按每周 +1.5% 的节奏爬升，动作变形立即停。',
-    ],
-    tags: ['薄肌', '冲击期', '90%', '第三阶段'],
-    daysPerWeek: 4,
-    sessionMinutes: 75,
-    sessions: [
-      {
-        title: '第 1 天 · 胸',
-        weekday: 0,
-        focus: 'push',
-        exercises: [
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 2, weightPct: 90, note: '90%' },
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 5, weightPct: 78, note: '78%' },
-          { exerciseId: 'ex_db_incline_bench', sets: 3, reps: 8 },
-          { exerciseId: 'ex_cable_lateral_raise', sets: 3, reps: 11, note: '坐姿侧平举，10～12 次' },
-        ],
-      },
-      {
-        title: '第 2 天 · 背部',
-        weekday: 1,
-        focus: 'pull',
-        exercises: [
-          { exerciseId: 'ex_bb_deadlift', sets: 3, reps: 3, note: '超程硬拉' },
-          { exerciseId: 'ex_bb_row', sets: 4, reps: 10, note: '原计划为 T 型横杠开肘划船' },
-          { exerciseId: 'ex_mach_closegrip_pulldown', sets: 4, reps: 10, note: '对握，拉到头发高度' },
-          { exerciseId: 'ex_mach_reverse_fly', sets: 4, reps: 12 },
-        ],
-      },
-      {
-        title: '第 3 天 · 胸 + 手臂',
-        weekday: 4,
-        focus: 'upper',
-        exercises: [
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 2, weightPct: 90, note: '90%' },
-          { exerciseId: 'ex_bb_bench', sets: 3, reps: 5, weightPct: 78, note: '78%' },
-          { exerciseId: 'ex_bb_curl', sets: 4, reps: 10 },
-          { exerciseId: 'ex_cable_pushdown', sets: 4, reps: 12 },
-        ],
-      },
-      {
-        title: '第 4 天 · 腿 + 核心',
-        weekday: 5,
-        focus: 'legs',
-        exercises: [
-          { exerciseId: 'ex_bb_squat', sets: 3, reps: 2, weightPct: 83, note: '83%' },
-          { exerciseId: 'ex_bb_squat', sets: 3, reps: 5, weightPct: 78, note: '78%' },
-          { exerciseId: 'ex_cable_crunch', sets: 4, reps: 15, note: '跪姿' },
-          { exerciseId: 'ex_bw_russian_twist', sets: 4, reps: 12, note: '侧身卷腹下拉' },
-        ],
-      },
-    ],
-    requiredEquipmentIds: [
-      'eq_bench',
-      'eq_dumbbell',
-      'eq_barbell',
-      'eq_latpulldown',
-      'eq_peckdeck',
-      'eq_cable',
-      'eq_squatrack',
-      'eq_yogamat',
-    ],
-    note: '原计划节奏为「练 2 天 → 休 1 天 → 练 2 天 → 休 2 天」，已映射到周一 / 二 / 五 / 六。冲击期不设减负周。',
-    deload: false,
-  },
-]
+export const PLAN_TEMPLATES: PlanTemplate[] = [THIN_MUSCLE]
 
 export function getTemplate(id: string): PlanTemplate | undefined {
   return PLAN_TEMPLATES.find((t) => t.id === id)

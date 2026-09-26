@@ -121,3 +121,53 @@ export function epley1RM(weightKg: number, reps: number): number {
   if (reps === 1) return weightKg
   return Math.round(weightKg * (1 + reps / 30) * 10) / 10
 }
+
+/* ------------------------------------------------------------------ */
+/* 力量水平快速估算（建档向导用）                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 各动作「1RM / 体重」定级阈值（男性基准）：
+ * [beginner 下限, intermediate 下限]，低于 beginner 下限为新手
+ */
+const STRENGTH_STANDARDS: Record<string, [number, number]> = {
+  ex_bb_bench: [0.6, 1.0],
+  ex_bb_squat: [0.8, 1.4],
+  ex_bb_deadlift: [1.0, 1.6],
+  ex_bb_ohp: [0.4, 0.65],
+  ex_bb_row: [0.6, 0.9],
+}
+
+/** 参与快速定级的动作（建档向导展示用） */
+export const STRENGTH_TEST_EXERCISE_IDS = Object.keys(STRENGTH_STANDARDS)
+
+export interface StrengthLiftInput {
+  exerciseId: string
+  weightKg: number
+  reps: number
+}
+
+/**
+ * 用 1~3 个动作的「重量 × 次数」估算训练经验：
+ * Epley 1RM ÷ 体重，对照力量标准定级，多个动作取平均。
+ * 无法估算（无有效输入）时返回 null。
+ */
+export function estimateExperience(
+  lifts: StrengthLiftInput[],
+  bodyweightKg: number,
+  gender: Profile['gender'],
+): Experience | null {
+  const genderScale = gender === 'female' ? 1 / 0.65 : gender === 'other' ? 1 / 0.85 : 1
+  const scores: number[] = []
+  for (const lift of lifts) {
+    const std = STRENGTH_STANDARDS[lift.exerciseId]
+    if (!std || bodyweightKg <= 0) continue
+    const orm = epley1RM(lift.weightKg, lift.reps)
+    if (orm <= 0) continue
+    const ratio = (orm / bodyweightKg) * genderScale
+    scores.push(ratio < std[0] ? 0 : ratio < std[1] ? 1 : 2)
+  }
+  if (!scores.length) return null
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+  return avg < 0.5 ? 'novice' : avg < 1.5 ? 'beginner' : 'intermediate'
+}

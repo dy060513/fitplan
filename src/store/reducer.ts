@@ -3,6 +3,7 @@ import type {
   AppState,
   Equipment,
   EquipmentCategory,
+  ExerciseProgress,
   Feedback,
   MuscleGroup,
   Plan,
@@ -30,6 +31,8 @@ export type Action =
       type: 'completeOnboarding'
       profile: Omit<Profile, 'id' | 'userId' | 'updatedAt' | 'weightLogs'> & { weightLogs?: WeightLog[] }
       selectedEquipmentIds: string[]
+      /** 快速力量估算的初始重量，写入 progress 作为起始处方 */
+      progressSeed?: Record<string, ExerciseProgress>
     }
   | { type: 'saveProfile'; patch: Partial<Profile> }
   | { type: 'addWeightLog'; kg: number; date?: string }
@@ -39,6 +42,7 @@ export type Action =
   | { type: 'removeCustomEquipment'; id: string }
   | { type: 'generatePlan'; startDate?: string }
   | { type: 'applyTemplate'; templateId: string; startDate?: string }
+  | { type: 'cancelPlan' }
   | { type: 'replacePlanExercise'; planSessionId: string; planExerciseId: string; exerciseId: string }
   | {
       type: 'updatePlanExercise'
@@ -116,6 +120,9 @@ export function reducer(state: AppState, action: Action): AppState {
         user,
         profile,
         selectedEquipmentIds: action.selectedEquipmentIds,
+        progress: action.progressSeed
+          ? { ...state.progress, ...action.progressSeed }
+          : state.progress,
         sessions: state.sessions,
       }
     }
@@ -229,6 +236,9 @@ export function reducer(state: AppState, action: Action): AppState {
         plan: result.plan,
       }
     }
+
+    case 'cancelPlan':
+      return { ...state, plan: null }
 
     case 'replacePlanExercise': {
       if (!state.plan) return state

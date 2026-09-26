@@ -19,8 +19,8 @@ export function Card({
     <div
       onClick={onClick}
       className={cx(
-        'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm',
-        'dark:border-slate-800 dark:bg-slate-900',
+        'rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card',
+        'dark:border-white/[0.06] dark:bg-ink-card dark:shadow-card-dark',
         onClick && 'active:scale-[0.995] transition',
         className,
       )}
@@ -53,12 +53,14 @@ type ButtonProps = {
 }
 
 const VARIANTS: Record<string, string> = {
-  primary: 'bg-brand-600 text-white active:bg-brand-700 disabled:bg-slate-300 dark:disabled:bg-slate-700',
+  primary:
+    'bg-gradient-to-b from-brand-400 to-brand-500 text-brand-950 shadow-glow-sm active:from-brand-500 active:to-brand-600 disabled:from-slate-300 disabled:to-slate-300 disabled:text-white disabled:shadow-none dark:disabled:from-slate-700 dark:disabled:to-slate-700',
   secondary:
-    'bg-slate-100 text-slate-800 active:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:active:bg-slate-700',
+    'bg-slate-100 text-slate-800 active:bg-slate-200 dark:bg-white/[0.08] dark:text-slate-100 dark:active:bg-white/[0.14]',
   ghost:
-    'bg-transparent text-brand-600 border border-brand-200 active:bg-brand-50 dark:text-brand-300 dark:border-slate-700 dark:active:bg-slate-800',
-  danger: 'bg-rose-600 text-white active:bg-rose-700',
+    'bg-transparent text-brand-700 border border-brand-300 active:bg-brand-50 dark:text-brand-300 dark:border-brand-500/30 dark:active:bg-brand-500/10',
+  danger:
+    'bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-[0_6px_20px_-6px_rgb(244_63_94/0.5)] active:from-rose-600 active:to-rose-700',
 }
 
 const SIZES: Record<string, string> = {
@@ -84,6 +86,7 @@ export function Button({
       disabled={disabled}
       className={cx(
         'inline-flex items-center justify-center gap-1 rounded-xl font-medium transition select-none',
+        'active:scale-[0.96] active:transition-transform active:duration-75',
         'disabled:cursor-not-allowed disabled:opacity-60',
         VARIANTS[variant],
         SIZES[size],
@@ -119,8 +122,8 @@ export function Chip({
         'inline-flex items-center justify-center rounded-full border font-medium transition select-none',
         size === 'sm' ? 'min-h-[32px] px-3 text-[12px]' : 'min-h-[40px] px-3.5 text-[14px]',
         active
-          ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-500/15 dark:text-brand-300'
-          : 'border-slate-200 bg-white text-slate-600 active:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+          ? 'border-transparent bg-gradient-to-b from-brand-400 to-brand-500 font-semibold text-brand-950 shadow-glow-sm'
+          : 'border-slate-200 bg-white text-slate-600 active:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300',
         className,
       )}
     >
@@ -131,10 +134,10 @@ export function Chip({
 
 export function Tag({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'brand' | 'warn' | 'ok' }) {
   const tones: Record<string, string> = {
-    slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-    brand: 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300',
-    warn: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-    ok: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+    slate: 'bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300',
+    brand: 'bg-brand-100 text-brand-800 dark:bg-brand-400/10 dark:text-brand-300',
+    warn: 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300',
+    ok: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300',
   }
   return (
     <span className={cx('inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium', tones[tone])}>
@@ -273,8 +276,8 @@ export function Modal({
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative z-10 max-h-[88vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-xl dark:bg-slate-900">
+      <div className="animate-overlay absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="animate-sheet relative z-10 max-h-[88vh] w-full max-w-md overflow-y-auto rounded-t-[2rem] bg-white p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-xl dark:bg-ink-soft dark:shadow-card-dark">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <button

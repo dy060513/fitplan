@@ -27,7 +27,7 @@ export default function App() {
   if (!onboarded) return <Onboarding onDone={() => undefined} />
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f14]">
+    <div className="min-h-screen bg-paper dark:bg-ink">
       <div className="mx-auto max-w-md px-4 pb-24 pt-5">
         <header className="mb-4 flex items-center justify-between">
           <div className="min-w-0">
@@ -39,10 +39,12 @@ export default function App() {
             </Button>
           )}
         </header>
-        {tab === 'plan' && <PlanPage onGoTrain={() => setTab('train')} />}
-        {tab === 'train' && <TrainPage onGoPlan={() => setTab('plan')} />}
-        {tab === 'records' && <RecordsPage />}
-        {tab === 'me' && <MePage onGoOnboarding={() => setTab('plan')} />}
+        <div key={tab} className="animate-page">
+          {tab === 'plan' && <PlanPage onGoTrain={() => setTab('train')} />}
+          {tab === 'train' && <TrainPage onGoPlan={() => setTab('plan')} />}
+          {tab === 'records' && <RecordsPage />}
+          {tab === 'me' && <MePage onGoOnboarding={() => setTab('plan')} />}
+        </div>
         <div className="mt-6">
           <DisclaimerBar />
         </div>

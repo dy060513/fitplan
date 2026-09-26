@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { Exercise, PlanExercise, PlanSession } from '@/types'
 import { useApp } from '@/store/AppContext'
 import { Button, Card, Chip, EmptyState, Field, Modal, NumberInput, SectionTitle, Tag, cx } from '@/components/ui'
+import { DialAdjuster, HoldButton } from '@/components/interactions'
 import { MUSCLE_GROUP_LABEL, PATTERN_LABEL, WEEKDAY_LABEL, GOAL_LABEL, EXPERIENCE_SHORT } from '@/lib/labels'
 import { formatRest, formatSetsReps, formatTarget, formatWeight } from '@/lib/format'
 import { findAlternatives } from '@/engine/alternatives'
 import { sessionDate } from '@/engine/generate'
 import { needsNoWeight } from '@/engine/prescription'
+import { stepFor } from '@/engine/load'
 import { PLAN_TEMPLATES, type PlanTemplate } from '@/data/templates'
 import { formatShortDate } from '@/lib/utils'
 
@@ -14,6 +16,9 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
   const { state, dispatch } = useApp()
   const { plan, profile, exercises, selectedEquipmentIds } = state
   const [weekIdx, setWeekIdx] = useState(0)
+  const [dayIdx, setDayIdx] = useState(0)
+  const [dir, setDir] = useState<1 | -1>(1)
+  const touchX = useRef<number | null>(null)
   const [swap, setSwap] = useState<{ session: PlanSession; pe: PlanExercise } | null>(null)
   const [edit, setEdit] = useState<{ session: PlanSession; pe: PlanExercise } | null>(null)
   const [tplOpen, setTplOpen] = useState(false)
@@ -45,19 +50,40 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
   }
 
   const week = plan.weeks[Math.min(weekIdx, plan.weeks.length - 1)]
+  const sessions = week.sessions
+  const safeDay = Math.min(dayIdx, Math.max(0, sessions.length - 1))
+  const session = sessions[safeDay]
+
+  const goDay = (next: number) => {
+    const clamped = Math.max(0, Math.min(sessions.length - 1, next))
+    if (clamped === safeDay) return
+    setDir(clamped > safeDay ? 1 : -1)
+    setDayIdx(clamped)
+  }
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchX.current = e.touches[0].clientX
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchX.current
+    touchX.current = null
+    if (dx <= -60) goDay(safeDay + 1)
+    else if (dx >= 60) goDay(safeDay - 1)
+  }
 
   return (
     <div>
       {/* 概览 */}
-      <Card className="mb-4">
+      <Card className="mb-4 bg-gradient-to-br from-white via-white to-brand-100/60 dark:from-ink-card dark:via-ink-card dark:to-[#161c0f]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[13px] text-slate-500 dark:text-slate-400">
+            <p className="text-[12px] font-medium tracking-wide text-slate-500 dark:text-slate-400">
               {plan.sourceTemplateId
-                ? `模板计划 · 每周 ${week.sessions.length} 练`
+                ? `模板计划 · 共 ${plan.weeks.length} 周`
                 : `${EXPERIENCE_SHORT[profile.experience]} · ${GOAL_LABEL[profile.goal]} · 每周 ${profile.daysPerWeek} 天`}
             </p>
-            <h2 className="mt-0.5 truncate text-[17px] font-semibold">{plan.splitName}</h2>
+            <h2 className="mt-0.5 truncate text-[19px] font-bold tracking-tight">{plan.splitName}</h2>
           </div>
           <Tag tone="brand">{plan.mesocycleWeeks} 周中周期</Tag>
         </div>
@@ -67,7 +93,7 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
           {profile.injuries.length > 0 && <Tag tone="warn">已避开 {profile.injuries.length} 处禁忌部位</Tag>}
         </div>
         {plan.sourceTemplateName && (
-          <div className="mt-3 rounded-xl bg-brand-50 px-3 py-2 text-[12px] leading-5 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
+          <div className="mt-3 rounded-xl bg-brand-100/70 px-3 py-2 text-[12px] leading-5 text-brand-800 dark:bg-brand-400/10 dark:text-brand-300">
             来源模板「{plan.sourceTemplateName}」。组数、次数、重量都可以点动作右侧的「改」自行调整。
           </div>
         )}
@@ -76,11 +102,26 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
       {/* 周切换 */}
       <div className="mb-3 flex gap-2 overflow-x-auto no-scrollbar">
         {plan.weeks.map((w, i) => (
-          <Chip key={w.id} active={week.weekNumber === w.weekNumber} onClick={() => setWeekIdx(i)} className="shrink-0">
+          <Chip
+            key={w.id}
+            active={week.weekNumber === w.weekNumber}
+            onClick={() => {
+              setWeekIdx(i)
+              setDayIdx(0)
+            }}
+            className="shrink-0"
+          >
             第 {w.weekNumber} 周{w.isDeload ? ' · 减负' : ''}
           </Chip>
         ))}
       </div>
+
+      {/* 当前阶段（多阶段模板） */}
+      {week.stageLabel && (
+        <div className="mb-3 rounded-xl bg-violet-50 px-3 py-2 text-[12px] leading-5 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+          当前阶段：{week.stageLabel}（第 {week.weekNumber} / {plan.weeks.length} 周，到周自动进入下一阶段）
+        </div>
+      )}
 
       {week.isDeload && (
         <div className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-[12px] leading-5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
@@ -88,31 +129,57 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
         </div>
       )}
 
-      <SectionTitle extra={<span className="text-[12px] text-slate-400">共 {week.sessions.length} 次</span>}>
+      {/* 日指示 + 滑动切换 */}
+      <SectionTitle
+        extra={
+          <span className="text-[12px] text-slate-400">
+            第 {safeDay + 1} / {sessions.length} 天 · 左右滑动切换
+          </span>
+        }
+      >
         本周训练安排
       </SectionTitle>
 
-      <div className="space-y-3">
-        {week.sessions.map((s) => (
-          <SessionCard
+      <div className="mb-3 flex items-center justify-center gap-1.5">
+        {sessions.map((s, i) => (
+          <button
             key={s.id}
-            session={s}
-            date={sessionDate(plan, week.weekNumber, s.weekday)}
+            type="button"
+            aria-label={`第 ${i + 1} 天`}
+            onClick={() => goDay(i)}
+            className={cx(
+              'h-1.5 rounded-full transition-all',
+              i === safeDay ? 'w-6 bg-brand-500' : 'w-1.5 bg-slate-300 dark:bg-slate-700',
+            )}
+          />
+        ))}
+      </div>
+
+      {session && (
+        <div
+          key={session.id}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          className={dir === 1 ? 'animate-slide-in-right' : 'animate-slide-in-left'}
+        >
+          <SessionView
+            session={session}
+            date={sessionDate(plan, week.weekNumber, session.weekday)}
             exerciseById={exerciseById}
             onStart={() => {
               dispatch({
                 type: 'startSession',
-                planSessionId: s.id,
-                title: s.title,
-                focus: PATTERN_LABEL[s.focus],
+                planSessionId: session.id,
+                title: session.title,
+                focus: PATTERN_LABEL[session.focus],
               })
               onGoTrain()
             }}
-            onSwap={(pe) => setSwap({ session: s, pe })}
-            onEdit={(pe) => setEdit({ session: s, pe })}
+            onSwap={(pe) => setSwap({ session, pe })}
+            onEdit={(pe) => setEdit({ session, pe })}
           />
-        ))}
-      </div>
+        </div>
+      )}
 
       <div className="mt-4 space-y-2">
         <Button variant="secondary" full onClick={() => setTplOpen(true)}>
@@ -127,6 +194,15 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
         >
           按我的偏好重新生成
         </Button>
+        <HoldButton
+          full
+          label="长按取消当前计划"
+          holdingLabel="松手取消，继续按住确认取消计划…"
+          onConfirm={() => dispatch({ type: 'cancelPlan' })}
+        />
+        <p className="text-center text-[11px] leading-5 text-slate-400 dark:text-slate-500">
+          取消计划不会删除已完成的训练记录，可以随时重新生成或套用模板。
+        </p>
       </div>
 
       {swap && swap.pe && (
@@ -159,9 +235,9 @@ export function PlanPage({ onGoTrain }: { onGoTrain: () => void }) {
   )
 }
 
-/* --------------------------- 单次训练卡片 --------------------------- */
+/* --------------------------- 单日训练视图 --------------------------- */
 
-function SessionCard({
+function SessionView({
   session,
   date,
   exerciseById,
@@ -176,12 +252,11 @@ function SessionCard({
   onSwap: (pe: PlanExercise) => void
   onEdit: (pe: PlanExercise) => void
 }) {
-  const [open, setOpen] = useState(false)
   const done = session.status === 'done'
 
   return (
     <Card className={cx(done && 'opacity-70')}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 text-left">
+      <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-semibold">{session.title}</span>
@@ -192,88 +267,85 @@ function SessionCard({
             {session.exercises.length} 个动作
           </p>
         </div>
-        <span className={cx('shrink-0 text-slate-400 transition', open && 'rotate-180')}>▾</span>
-      </button>
+      </div>
 
-      {open && (
-        <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <Block title="热身（约 5–10 分钟）">
-            <ul className="space-y-1">
-              {session.warmup.map((w) => (
-                <li key={w.id} className="text-[13px] leading-6 text-slate-600 dark:text-slate-300">
-                  · {w.name} <span className="text-slate-400">{w.minutes} 分钟</span>
-                  {w.note && <div className="pl-2 text-[12px] text-slate-400">{w.note}</div>}
-                </li>
-              ))}
-            </ul>
-          </Block>
+      <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <Block title="热身（约 5–10 分钟）">
+          <ul className="space-y-1">
+            {session.warmup.map((w) => (
+              <li key={w.id} className="text-[13px] leading-6 text-slate-600 dark:text-slate-300">
+                · {w.name} <span className="text-slate-400">{w.minutes} 分钟</span>
+                {w.note && <div className="pl-2 text-[12px] text-slate-400">{w.note}</div>}
+              </li>
+            ))}
+          </ul>
+        </Block>
 
-          <Block title="主体训练">
-            <div className="space-y-2.5">
-              {session.exercises.map((pe) => {
-                const ex = exerciseById[pe.exerciseId]
-                return (
-                  <div
-                    key={pe.id}
-                    className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-[15px] font-medium">{ex?.name ?? '未知动作'}</p>
-                        <p className="mt-0.5 text-[12px] text-slate-500 dark:text-slate-400">
-                          {ex ? MUSCLE_GROUP_LABEL[ex.muscleGroup] : ''} · {formatSetsReps(ex, pe.sets, pe.reps)}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[15px] font-semibold text-brand-600 dark:text-brand-400">
-                          {formatWeight(ex, pe.suggestedWeightKg)}
-                        </p>
-                        <p className="text-[11px] text-slate-400">{formatRest(pe.restSeconds)}</p>
-                      </div>
+        <Block title="主体训练">
+          <div className="stagger space-y-2.5">
+            {session.exercises.map((pe) => {
+              const ex = exerciseById[pe.exerciseId]
+              return (
+                <div
+                  key={pe.id}
+                  className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-medium">{ex?.name ?? '未知动作'}</p>
+                      <p className="mt-0.5 text-[12px] text-slate-500 dark:text-slate-400">
+                        {ex ? MUSCLE_GROUP_LABEL[ex.muscleGroup] : ''} · {formatSetsReps(ex, pe.sets, pe.reps)}
+                      </p>
                     </div>
-                    {!!ex?.cues.length && (
-                      <ul className="mt-2 space-y-1">
-                        {ex.cues.map((c, i) => (
-                          <li key={i} className="text-[12px] leading-5 text-slate-500 dark:text-slate-400">
-                            · {c}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      {pe.reason && (
-                        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-400">{pe.reason}</span>
-                      )}
-                      <div className="flex shrink-0 gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => onEdit(pe)}>
-                          改
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => onSwap(pe)}>
-                          换一个
-                        </Button>
-                      </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[16px] font-bold tracking-tight text-brand-700 dark:text-brand-300">
+                        {formatWeight(ex, pe.suggestedWeightKg)}
+                      </p>
+                      <p className="text-[11px] text-slate-400">{formatRest(pe.restSeconds)}</p>
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </Block>
+                  {!!ex?.cues.length && (
+                    <ul className="mt-2 space-y-1">
+                      {ex.cues.map((c, i) => (
+                        <li key={i} className="text-[12px] leading-5 text-slate-500 dark:text-slate-400">
+                          · {c}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    {pe.reason && (
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-400">{pe.reason}</span>
+                    )}
+                    <div className="flex shrink-0 gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => onEdit(pe)}>
+                        改
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => onSwap(pe)}>
+                        换一个
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Block>
 
-          <Block title="放松拉伸">
-            <ul className="space-y-1">
-              {session.cooldown.map((c) => (
-                <li key={c.id} className="text-[13px] leading-6 text-slate-600 dark:text-slate-300">
-                  · {c.name} <span className="text-slate-400">{c.seconds} 秒</span>
-                </li>
-              ))}
-            </ul>
-          </Block>
+        <Block title="放松拉伸">
+          <ul className="space-y-1">
+            {session.cooldown.map((c) => (
+              <li key={c.id} className="text-[13px] leading-6 text-slate-600 dark:text-slate-300">
+                · {c.name} <span className="text-slate-400">{c.seconds} 秒</span>
+              </li>
+            ))}
+          </ul>
+        </Block>
 
-          <Button full size="lg" onClick={onStart} className="mt-3">
-            开始这次训练
-          </Button>
-        </div>
-      )}
+        <Button full size="lg" onClick={onStart} className="mt-3">
+          开始这次训练
+        </Button>
+      </div>
     </Card>
   )
 }
@@ -308,6 +380,8 @@ function EditExerciseModal({
 
   const noWeight = !exercise || needsNoWeight(exercise.loadType)
   const unit = exercise ? formatTarget(exercise, 0).replace('0 ', '') : '次'
+  const weightStep = exercise ? stepFor(exercise.loadType, Math.max(1, weight)) || 0.5 : 0.5
+  const weightMax = Math.max(120, Math.ceil((weight * 2) / 10) * 10)
 
   return (
     <Modal
@@ -358,8 +432,15 @@ function EditExerciseModal({
         <NumberInput value={reps} onChange={setReps} min={1} max={600} suffix={unit} />
       </Field>
       {!noWeight && (
-        <Field label="建议重量" hint="按器械最小刻度取整；单侧器械按「每只」计">
-          <NumberInput value={weight} onChange={setWeight} min={0} max={400} step={0.5} suffix="kg" />
+        <Field label="建议重量" hint="左右滑动刻度调节，按器械最小刻度取值；单侧器械按「每只」计">
+          <DialAdjuster
+            value={weight}
+            onChange={setWeight}
+            min={0}
+            max={weightMax}
+            step={weightStep}
+            unit="kg"
+          />
         </Field>
       )}
       <Field label="组间休息">
@@ -451,6 +532,34 @@ function TemplateModal({ onClose }: { onClose: () => void }) {
     onClose()
   }
 
+  const renderSessions = (sessions: PlanTemplate['sessions']) => (
+    <div className="space-y-2">
+      {(sessions ?? []).map((s) => (
+        <div key={s.weekday} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-[14px] font-medium">
+            {s.title} <span className="text-[12px] text-slate-400">{WEEKDAY_LABEL[s.weekday]}</span>
+          </p>
+          <ul className="mt-1.5 space-y-0.5">
+            {s.exercises.map((it, i) => {
+              const ex = exerciseById[it.exerciseId]
+              return (
+                <li key={i} className="flex justify-between gap-2 text-[12px] text-slate-600 dark:text-slate-300">
+                  <span className="truncate">
+                    {ex?.name ?? it.exerciseId}
+                    {it.note && <span className="text-slate-400">（{it.note}）</span>}
+                  </span>
+                  <span className="shrink-0 text-slate-400">
+                    {it.sets} × {formatTarget(ex, it.reps)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+
   return (
     <Modal open title="训练模板" onClose={onClose}>
       {!detail ? (
@@ -468,7 +577,9 @@ function TemplateModal({ onClose }: { onClose: () => void }) {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-[15px] font-semibold">{t.name}</p>
-                  <Tag tone="brand">每周 {t.daysPerWeek} 天</Tag>
+                  <Tag tone="brand">
+                    {t.stages ? `${t.stages.length} 阶段 · ${t.stages.length * state.settings.mesocycleWeeks} 周` : `每周 ${t.daysPerWeek} 天`}
+                  </Tag>
                 </div>
                 <p className="mt-1 text-[12px] leading-5 text-slate-500 dark:text-slate-400">{t.summary}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -504,34 +615,25 @@ function TemplateModal({ onClose }: { onClose: () => void }) {
             </ul>
           </div>
 
-          <div className="mt-3 space-y-2">
-            {detail.sessions.map((s) => (
-              <div
-                key={s.weekday}
-                className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"
-              >
-                <p className="text-[14px] font-medium">
-                  {s.title} <span className="text-[12px] text-slate-400">{WEEKDAY_LABEL[s.weekday]}</span>
-                </p>
-                <ul className="mt-1.5 space-y-0.5">
-                  {s.exercises.map((it, i) => {
-                    const ex = exerciseById[it.exerciseId]
-                    return (
-                      <li key={i} className="flex justify-between gap-2 text-[12px] text-slate-600 dark:text-slate-300">
-                        <span className="truncate">
-                          {ex?.name ?? it.exerciseId}
-                          {it.note && <span className="text-slate-400">（{it.note}）</span>}
-                        </span>
-                        <span className="shrink-0 text-slate-400">
-                          {it.sets} × {formatTarget(ex, it.reps)}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </div>
-            ))}
-          </div>
+          {detail.stages ? (
+            <div className="mt-3 space-y-3">
+              {detail.stages.map((st, i) => (
+                <div key={st.id}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <Tag tone="brand">
+                      第 {i * state.settings.mesocycleWeeks + 1}–{(i + 1) * state.settings.mesocycleWeeks} 周
+                    </Tag>
+                    <p className="text-[14px] font-semibold">{st.name}</p>
+                  </div>
+                  <p className="mb-2 text-[12px] leading-5 text-slate-500 dark:text-slate-400">{st.summary}</p>
+                  {renderSessions(st.sessions)}
+                  {st.note && <p className="mt-1.5 text-[11px] leading-5 text-slate-400">{st.note}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3">{renderSessions(detail.sessions)}</div>
+          )}
 
           <div className="mt-3 space-y-2">
             {missingEquipment(detail).length > 0 && (

@@ -19,6 +19,28 @@ body {
     -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial,
     sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* 数字等宽：重量、次数、秒数对齐不跳动，数据感更强 */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* 深色模式：顶部荧光氛围光晕（高级感的关键，克制不刺眼） */
+.dark body {
+  background-color: #0a0d12;
+}
+.dark body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 32% at 50% -6%, rgb(132 204 22 / 0.09), transparent 70%),
+    radial-gradient(50% 30% at 90% 100%, rgb(132 204 22 / 0.04), transparent 70%);
+}
+.dark #root {
+  position: relative;
+  z-index: 1;
 }
 
 /* 隐藏数字输入框的上下箭头，移动端更清爽 */
@@ -42,4 +64,142 @@ input[type='number'] {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ------------------------------ 动效 ------------------------------ */
+
+/* 页面切换：上浮淡入 */
+@keyframes page-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-page {
+  animation: page-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 卡片错落入场：.stagger 容器内的直接子元素依次浮现 */
+@keyframes fade-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.stagger > * {
+  animation: fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger > *:nth-child(3) { animation-delay: 0.10s; }
+.stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.stagger > *:nth-child(7) { animation-delay: 0.26s; }
+.stagger > *:nth-child(n + 8) { animation-delay: 0.30s; }
+
+/* 长按确认按钮的波形动画 */
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.animate-wave {
+  animation: wave 0.7s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+/* 每日计划滑动切换的进出动画 */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(48px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-48px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.animate-slide-in-left {
+  animation: slide-in-left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 弹窗：底部升起 + 遮罩淡入 */
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-sheet {
+  animation: sheet-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.animate-overlay {
+  animation: overlay-in 0.2s ease-out;
+}
+
+/* 数字强调弹出（完成一组 / 倒计时） */
+@keyframes num-pop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.animate-num-pop {
+  animation: num-pop 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 尊重「减少动态效果」系统设置 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

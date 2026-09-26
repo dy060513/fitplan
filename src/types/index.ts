@@ -281,6 +281,8 @@ export interface PlanWeek {
   weekNumber: number
   /** 第 4 周为减负周 */
   isDeload: boolean
+  /** 多阶段模板计划时标记本周所属阶段，如「第一阶段 · 肌肥大」 */
+  stageLabel?: string
   sessions: PlanSession[]
 }
 

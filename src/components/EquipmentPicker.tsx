@@ -3,6 +3,7 @@ import type { Equipment, EquipmentCategory, MuscleGroup } from '@/types'
 import { EQUIPMENT_CATEGORY_LABEL, MUSCLE_GROUP_LABEL } from '@/lib/labels'
 import { EQUIPMENT_CATEGORY_ORDER } from '@/data/equipment'
 import { Button, Chip, Field, Modal, NumberInput, TextInput, cx } from './ui'
+import { RemovableChips, SuggestInput } from './interactions'
 import { useApp } from '@/store/AppContext'
 
 const MUSCLE_CHOICES: MuscleGroup[] = [
@@ -43,15 +44,47 @@ export function EquipmentPicker({
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
   }
 
+  const suggestions = useMemo(
+    () =>
+      state.equipment.map((e) => ({
+        id: e.id,
+        label: e.name,
+        hint: selected.includes(e.id) ? '✓ 已选' : EQUIPMENT_CATEGORY_LABEL[e.category],
+      })),
+    [state.equipment, selected],
+  )
+
+  const selectedItems = useMemo(
+    () =>
+      selected
+        .map((id) => ({ id, label: state.equipment.find((e) => e.id === id)?.name }))
+        .filter((x): x is { id: string; label: string } => !!x.label),
+    [selected, state.equipment],
+  )
+
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-2 flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <TextInput value={query} onChange={setQuery} placeholder="搜索器械，如「哑铃」" />
+          <SuggestInput
+            value={query}
+            onChange={setQuery}
+            suggestions={suggestions}
+            onPick={(id) => {
+              toggle(id)
+              setQuery('')
+            }}
+            placeholder="输入器械名快速勾选，如「哑铃」"
+          />
         </div>
         <Button variant="secondary" size="md" onClick={() => setAddOpen(true)} className="shrink-0">
           + 自定义
         </Button>
+      </div>
+
+      {/* 已选器械：可点 ✕ 移除，其余自动补位 */}
+      <div className="mb-3">
+        <RemovableChips items={selectedItems} onRemove={toggle} empty="尚未勾选器械" />
       </div>
 
       {grouped.map((g) => (

@@ -15,6 +15,7 @@ import {
   WEEKDAY_SHORT,
 } from '@/lib/labels'
 import { Button, Card, Chip, DisclaimerBar, Field, Modal, NumberInput, SectionTitle, Tag } from '@/components/ui'
+import { HoldButton } from '@/components/interactions'
 import { EquipmentPicker, EquipmentSummary } from '@/components/EquipmentPicker'
 import { PreferenceEditor } from '@/components/PreferenceEditor'
 import { formatShortDate, todayISO } from '@/lib/utils'
@@ -259,18 +260,16 @@ export function MePage({ onGoOnboarding: _onGoOnboarding }: { onGoOnboarding: ()
               e.target.value = ''
             }}
           />
-          <Button
-            variant="danger"
+          <HoldButton
             full
-            onClick={() => {
-              if (confirm('将清空本机所有数据并重新开始，确定继续？')) {
-                dispatch({ type: 'reset' })
-                location.reload()
-              }
+            label="长按清空所有数据"
+            holdingLabel="松手取消，继续按住将清空全部数据…"
+            duration={1600}
+            onConfirm={() => {
+              dispatch({ type: 'reset' })
+              location.reload()
             }}
-          >
-            清空所有数据
-          </Button>
+          />
         </div>
       </Card>
 

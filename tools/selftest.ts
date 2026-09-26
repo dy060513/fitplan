@@ -12,7 +12,7 @@ import { expandTemplate } from '@/engine/template'
 import { suggestWeekdays } from '@/engine/split'
 import { applyFeedback } from '@/engine/progression'
 import { findAlternatives, isSafeFor } from '@/engine/alternatives'
-import { estimateStartWeight } from '@/engine/load'
+import { estimateStartWeight, estimateExperience } from '@/engine/load'
 
 let failed = 0
 let passed = 0
@@ -404,13 +404,13 @@ console.log(
     `${volumeSessions[0].exercises.map((pe) => `${byId[pe.exerciseId].name} ${pe.sets}×${pe.reps}`).join(' | ')}`,
 )
 
-console.log('\n[验收 8] 训练模板：薄肌训练法可展开为可执行计划')
+console.log('\n[验收 8] 训练模板：薄肌训练法（三阶段）可展开为 12 周计划')
 {
-  const stage1 = PLAN_TEMPLATES.find((t) => t.id === 'tpl_thin_muscle_stage1')!
-  const stage3 = PLAN_TEMPLATES.find((t) => t.id === 'tpl_thin_muscle_stage3')!
+  const tpl = PLAN_TEMPLATES.find((t) => t.id === 'tpl_thin_muscle')!
+  check('薄肌训练法为单模板三阶段', !!tpl && tpl.stages?.length === 3)
   // 勾选很少的器械，验证模板会自动补齐
   const r1 = expandTemplate({
-    template: stage1,
+    template: tpl,
     userId: 'u1',
     profile,
     exercises: PRESET_EXERCISES,
@@ -422,8 +422,12 @@ console.log('\n[验收 8] 训练模板：薄肌训练法可展开为可执行计
   const w1s1 = r1.plan.weeks[0].sessions.find((s) => s.weekday === 0)!
   const first = w1s1.exercises[0]
   const firstEx = byId[first.exerciseId]
-  check('模板生成 4 周计划', r1.plan.weeks.length === 4)
+  check('模板生成 12 周计划（3 阶段 × 4 周）', r1.plan.weeks.length === 12 && r1.plan.mesocycleWeeks === 12)
   check('第一阶段每周 5 次训练', r1.plan.weeks[0].sessions.length === 5)
+  check('第 1 周属于第一阶段', r1.plan.weeks[0].stageLabel?.includes('第一阶段') ?? false)
+  check('第 5 周自动进入第二阶段', r1.plan.weeks[4].stageLabel?.includes('第二阶段') ?? false)
+  check('第 9 周自动进入第三阶段', r1.plan.weeks[8].stageLabel?.includes('第三阶段') ?? false)
+  check('第二阶段每周 4 次训练', r1.plan.weeks[4].sessions.length === 4)
   check(
     '第 1 天第 1 个动作是平板卧推 4 × 8',
     firstEx.id === 'ex_bb_bench' && first.sets === 4 && first.reps === 8,
@@ -455,19 +459,14 @@ console.log('\n[验收 8] 训练模板：薄肌训练法可展开为可执行计
     !!bench && bench.suggestedWeightKg === estimateStartWeight(byId['ex_bb_bench'], profile),
     bench ? `${bench.suggestedWeightKg}` : '未找到',
   )
+  check(
+    '阶段末周减负：第 4、8 周减负，第 12 周（冲击期）不减负',
+    r1.plan.weeks[3].isDeload && r1.plan.weeks[7].isDeload && !r1.plan.weeks[11].isDeload,
+    `w4=${r1.plan.weeks[3].isDeload} w8=${r1.plan.weeks[7].isDeload} w12=${r1.plan.weeks[11].isDeload}`,
+  )
 
-  const r3 = expandTemplate({
-    template: stage3,
-    userId: 'u1',
-    profile,
-    exercises: PRESET_EXERCISES,
-    selectedEquipmentIds: ['eq_yogamat'],
-    mesocycleWeeks: 4,
-    progress: {},
-    startDateISO: '2026-09-21',
-  })
-  const w3s1 = r3.plan.weeks[0].sessions.find((s) => s.weekday === 0)!
-  const heavy = w3s1.exercises.find((pe) => pe.exerciseId === 'ex_bb_bench')
+  const w9s1 = r1.plan.weeks[8].sessions.find((s) => s.weekday === 0)!
+  const heavy = w9s1.exercises.find((pe) => pe.exerciseId === 'ex_bb_bench')
   check(
     '第三阶段 90% 处方重量高于 70% 基准',
     !!heavy &&
@@ -475,12 +474,32 @@ console.log('\n[验收 8] 训练模板：薄肌训练法可展开为可执行计
         Math.round(estimateStartWeight(byId['ex_bb_bench'], profile) / 2.5) * 2.5,
     heavy ? `${heavy.suggestedWeightKg}` : '未找到',
   )
-  check('冲击期模板不设减负周', r3.plan.weeks.every((w) => !w.isDeload))
-  check('模板计划带来源信息', r3.plan.sourceTemplateId === 'tpl_thin_muscle_stage3')
+  check('模板计划带来源信息', r1.plan.sourceTemplateId === 'tpl_thin_muscle')
   console.log(
-    `    示例：${w1s1.title} · ${w1s1.exercises
+    `    示例：${r1.plan.weeks[0].stageLabel} / ${w1s1.title} · ${w1s1.exercises
       .map((pe) => `${byId[pe.exerciseId].name} ${pe.sets}×${pe.reps}${pe.suggestedWeightKg ? `@${pe.suggestedWeightKg}kg` : ''}`)
       .join(' | ')}`,
+  )
+}
+
+console.log('\n[验收 9] 力量水平快速估算')
+{
+  check(
+    '卧推 20kg×10（65kg 体重男性）→ 新手',
+    estimateExperience([{ exerciseId: 'ex_bb_bench', weightKg: 20, reps: 10 }], 65, 'male') === 'novice',
+  )
+  check(
+    '卧推 60kg×5（65kg 体重男性）→ 中级',
+    estimateExperience([{ exerciseId: 'ex_bb_bench', weightKg: 60, reps: 5 }], 65, 'male') === 'intermediate',
+  )
+  check(
+    '深蹲 60kg×5（65kg 体重男性）→ 初级',
+    estimateExperience([{ exerciseId: 'ex_bb_squat', weightKg: 60, reps: 5 }], 65, 'male') === 'beginner',
+  )
+  check('无有效输入时返回 null', estimateExperience([], 65, 'male') === null)
+  check(
+    '女性同样成绩按系数放宽（卧推 40kg×5 → 中级）',
+    estimateExperience([{ exerciseId: 'ex_bb_bench', weightKg: 40, reps: 5 }], 60, 'female') === 'intermediate',
   )
 }
 

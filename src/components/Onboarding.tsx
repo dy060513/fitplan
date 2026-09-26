@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { BodyRegion, Experience, Gender, Goal, Profile } from '@/types'
+import type { BodyRegion, Experience, ExerciseProgress, Gender, Goal, Profile } from '@/types'
 import {
   BODY_REGION_LABEL,
   EXPERIENCE_LABEL,
@@ -9,11 +9,13 @@ import {
   MEDICAL_FLAGS,
 } from '@/lib/labels'
 import { Button, Card, Chip, DisclaimerBar, Field, NumberInput } from './ui'
+import { TagMultiSelect } from './interactions'
 import { EquipmentPicker } from './EquipmentPicker'
 import { PreferenceEditor } from './PreferenceEditor'
 import { useApp } from '@/store/AppContext'
 import { RECOMMENDED_EQUIPMENT_IDS } from '@/data/equipment'
 import { suggestWeekdays } from '@/engine/split'
+import { STRENGTH_TEST_EXERCISE_IDS, estimateExperience, epley1RM, type StrengthLiftInput } from '@/engine/load'
 
 const STEPS = ['身体数据', '训练经验与目标', '可投入时间', '训练节奏', '选择器械']
 
@@ -38,7 +40,7 @@ type Draft = Pick<
 >
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const { dispatch } = useApp()
+  const { state, dispatch } = useApp()
   const [step, setStep] = useState(0)
   const [draft, setDraft] = useState<Draft>({
     heightCm: 170,
@@ -59,13 +61,36 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     volume: {},
   })
   const [selected, setSelected] = useState<string[]>(RECOMMENDED_EQUIPMENT_IDS)
+  const [lifts, setLifts] = useState<StrengthLiftInput[]>([
+    { exerciseId: 'ex_bb_bench', weightKg: 0, reps: 0 },
+  ])
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }))
 
   const weekdays = suggestWeekdays(draft.daysPerWeek, draft.trainingRhythm ?? 'consecutive', draft.customWeekdays ?? [])
 
+  const validLifts = lifts.filter((l) => l.weightKg > 0 && l.reps > 0)
+  const estimated = estimateExperience(validLifts, draft.weightKg, draft.gender)
+
   const finish = () => {
-    dispatch({ type: 'completeOnboarding', profile: draft, selectedEquipmentIds: selected })
+    const now = new Date().toISOString()
+    const seed: Record<string, ExerciseProgress> = {}
+    for (const l of validLifts) {
+      seed[l.exerciseId] = {
+        exerciseId: l.exerciseId,
+        history: [],
+        currentWeightKg: l.weightKg,
+        currentReps: l.reps,
+        easyStreak: 0,
+        updatedAt: now,
+      }
+    }
+    dispatch({
+      type: 'completeOnboarding',
+      profile: draft,
+      selectedEquipmentIds: selected,
+      progressSeed: Object.keys(seed).length ? seed : undefined,
+    })
     dispatch({ type: 'generatePlan' })
     onDone()
   }
@@ -141,6 +166,108 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
                 ))}
               </div>
             </Field>
+
+            {/* 快速定级：填几个动作的重量×次数，自动估算经验等级 */}
+            <div className="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+              <p className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
+                练过？填 1–3 个动作快速定级（选填）
+              </p>
+              <p className="mt-0.5 text-[12px] leading-5 text-slate-400 dark:text-slate-500">
+                填你能完成的重量与次数，自动估算经验等级，并把重量作为计划起始重量，省去后面慢慢调。
+              </p>
+              <div className="mt-2.5 space-y-2">
+                {lifts.map((l, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select
+                      value={l.exerciseId}
+                      onChange={(e) =>
+                        setLifts((ls) => ls.map((x, j) => (j === i ? { ...x, exerciseId: e.target.value } : x)))
+                      }
+                      className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-[13px] dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      {STRENGTH_TEST_EXERCISE_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {state.exercises.find((x) => x.id === id)?.name ?? id}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="w-[76px] shrink-0">
+                      <NumberInput
+                        value={l.weightKg || ''}
+                        onChange={(v) => setLifts((ls) => ls.map((x, j) => (j === i ? { ...x, weightKg: v } : x)))}
+                        min={0}
+                        step={2.5}
+                        suffix="kg"
+                        placeholder="重量"
+                      />
+                    </div>
+                    <div className="w-[68px] shrink-0">
+                      <NumberInput
+                        value={l.reps || ''}
+                        onChange={(v) => setLifts((ls) => ls.map((x, j) => (j === i ? { ...x, reps: v } : x)))}
+                        min={0}
+                        suffix="次"
+                        placeholder="次数"
+                      />
+                    </div>
+                    {lifts.length > 1 && (
+                      <button
+                        type="button"
+                        aria-label="删除这一行"
+                        onClick={() => setLifts((ls) => ls.filter((_, j) => j !== i))}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 active:bg-slate-100 dark:active:bg-slate-800"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                {lifts.length < 3 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLifts((ls) => [
+                        ...ls,
+                        {
+                          exerciseId:
+                            STRENGTH_TEST_EXERCISE_IDS.find((id) => !ls.some((l) => l.exerciseId === id)) ??
+                            STRENGTH_TEST_EXERCISE_IDS[0],
+                          weightKg: 0,
+                          reps: 0,
+                        },
+                      ])
+                    }
+                    className="text-[13px] text-brand-600 dark:text-brand-400"
+                  >
+                    + 再加一个动作
+                  </button>
+                ) : (
+                  <span />
+                )}
+                {estimated && (
+                  <button
+                    type="button"
+                    onClick={() => patch({ experience: estimated })}
+                    className="rounded-full bg-brand-50 px-3 py-1 text-[12px] font-medium text-brand-700 transition active:scale-95 dark:bg-brand-500/15 dark:text-brand-300"
+                  >
+                    估算：{EXPERIENCE_LABEL[estimated]}（点我采用）
+                  </button>
+                )}
+              </div>
+              {validLifts.length > 0 && (
+                <p className="mt-1.5 text-[11px] leading-5 text-slate-400 dark:text-slate-500">
+                  {validLifts
+                    .map((l) => {
+                      const name = state.exercises.find((x) => x.id === l.exerciseId)?.name ?? ''
+                      return `${name} 1RM≈${epley1RM(l.weightKg, l.reps)}kg`
+                    })
+                    .join(' · ')}
+                </p>
+              )}
+            </div>
+
             <Field label="训练目标（单选）">
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(GOAL_LABEL) as Goal[]).map((g) => (
@@ -180,43 +307,22 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               </div>
             </Field>
             <Field label="伤病与禁忌部位（可多选）" hint="勾选后，计划会自动过滤掉可能加重该部位负担的动作">
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(BODY_REGION_LABEL) as BodyRegion[]).map((r) => (
-                  <Chip
-                    key={r}
-                    active={draft.injuries.includes(r)}
-                    onClick={() =>
-                      patch({
-                        injuries: draft.injuries.includes(r)
-                          ? draft.injuries.filter((x) => x !== r)
-                          : [...draft.injuries, r],
-                      })
-                    }
-                  >
-                    {BODY_REGION_LABEL[r]}
-                  </Chip>
-                ))}
-              </div>
+              <TagMultiSelect
+                options={(Object.keys(BODY_REGION_LABEL) as BodyRegion[]).map((r) => ({
+                  value: r,
+                  label: BODY_REGION_LABEL[r],
+                }))}
+                values={draft.injuries}
+                onChange={(injuries) => patch({ injuries })}
+              />
             </Field>
             <Field label="其他健康状况（可多选，选填）">
-              <div className="flex flex-wrap gap-2">
-                {MEDICAL_FLAGS.map((f) => (
-                  <Chip
-                    key={f}
-                    size="sm"
-                    active={draft.medicalFlags.includes(f)}
-                    onClick={() =>
-                      patch({
-                        medicalFlags: draft.medicalFlags.includes(f)
-                          ? draft.medicalFlags.filter((x) => x !== f)
-                          : [...draft.medicalFlags, f],
-                      })
-                    }
-                  >
-                    {f}
-                  </Chip>
-                ))}
-              </div>
+              <TagMultiSelect
+                size="sm"
+                options={MEDICAL_FLAGS.map((f) => ({ value: f, label: f }))}
+                values={draft.medicalFlags}
+                onChange={(medicalFlags) => patch({ medicalFlags })}
+              />
             </Field>
             {draft.injuries.length > 0 || draft.medicalFlags.length > 0 ? (
               <DisclaimerBar />
