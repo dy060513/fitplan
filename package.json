@@ -1,0 +1,28 @@
+{
+  "name": "fitplan",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "FitPlan - 个性化健身计划应用（移动端优先 / 离线可用 / 纯本地规则引擎）",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "selftest": "esbuild tools/selftest.ts --bundle --platform=node --format=cjs --alias:@=./src --outfile=.selftest.cjs --log-level=error && node .selftest.cjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

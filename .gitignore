@@ -1,0 +1,6 @@
+node_modules/
+dist/
+_*.txt
+*.tsbuildinfo
+.selftest.cjs
+.DS_Store
